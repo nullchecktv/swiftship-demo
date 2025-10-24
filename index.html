@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SwiftShip Logistics</title>
+    <script>
+      (function() {
+        try {
+          var saved = localStorage.getItem('theme');
+          var prefers = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+          var dark = saved ? (saved === 'dark') : prefers;
+          if (dark) document.documentElement.classList.add('theme-dark');
+        } catch (e) {}
+      })();
+    </script>
+    <!-- Favicon: Truck emoji as inline SVG -->
+    <link
+      rel="icon"
+      href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🚚</text></svg>'
+    />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+    <!-- Mermaid CDN (allowed as the single external dependency) -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <script>
+      try { mermaid.initialize({ startOnLoad: false, securityLevel: 'loose' }); } catch (e) {}
+    </script>
+  </body>
+  </html>
