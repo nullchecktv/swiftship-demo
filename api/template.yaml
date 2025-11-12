@@ -1,0 +1,434 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  SwiftShip Demo - Simplified A2A Agent System for re:Invent
+
+Parameters:
+  MomentoApiKey:
+    Type: String
+    Description: Momento API key for A2A event streaming
+    NoEcho: true
+  FromEmail:
+    Type: String
+    Description: Email address to send emails from
+    Default: ''
+
+Metadata:
+  esbuild-properties: &esbuild-properties
+    Format: esm
+    Minify: false
+    OutExtension:
+      - .js=.mjs
+    Target: es2020
+    Sourcemap: false
+    EntryPoints:
+      - index.mjs
+    Banner:
+      - js=import { createRequire } from 'module'; const require = createRequire(import.meta.url);
+    External:
+      - "@aws-sdk/*"
+    Loader: []
+
+Globals:
+  Function:
+    Runtime: nodejs22.x
+    CodeUri: functions
+    Architectures:
+      - arm64
+    Tracing: Active
+    Timeout: 30
+    MemorySize: 1024
+    Environment:
+      Variables:
+        AWS_NODEJS_CONNECTION_REUSE_ENABLED: 1
+        MOMENTO_API_KEY: !Ref MomentoApiKey
+        MOMENTO_CACHE_NAME: "mcp"
+        TABLE_NAME: !Ref SwiftshipTable
+  Api:
+    Cors:
+      AllowMethods: "'POST,OPTIONS'"
+      AllowHeaders: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token,X-Context-Id'"
+      AllowOrigin: !Sub "'*'"
+
+Resources:
+  SwiftShipApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: api
+      DefinitionBody:
+        Fn::Transform:
+          Name: AWS::Include
+          Parameters:
+            Location: ./openapi.yaml
+
+  SwiftshipTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+        - AttributeName: GSI1PK
+          AttributeType: S
+        - AttributeName: GSI1SK
+          AttributeType: S
+      GlobalSecondaryIndexes:
+        - IndexName: GSI1
+          KeySchema:
+            - AttributeName: GSI1PK
+              KeyType: HASH
+            - AttributeName: GSI1SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+
+  AgentMemory:
+    Type: AWS::BedrockAgentCore::Memory
+    Properties:
+      Name: swiftshipmemory
+      EventExpiryDuration: 90
+      MemoryStrategies:
+        - SummaryMemoryStrategy:
+            Name: summaryMemory
+            Description: The summarization of issues with deliveries
+            Namespaces:
+              - "{sessionId}-deliveries"
+
+  OrderAgent:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        <<: *esbuild-properties
+        EntryPoints:
+          - agents/order.mjs
+    Properties:
+      Handler: agents/order.handler
+      Environment:
+        Variables:
+          MODEL_ID: us.amazon.nova-pro-v1:0
+          MEMORY_ID: !GetAtt AgentMemory.MemoryId
+      FunctionUrlConfig:
+        AuthType: NONE
+        Cors:
+          AllowCredentials: false
+          AllowMethods:
+            - GET
+            - POST
+          AllowOrigins:
+            - "*"
+          AllowHeaders:
+            - "*"
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Version: 2012-10-17
+          Statement:
+            - Effect: Allow
+              Action: bedrock:InvokeModel
+              Resource:
+                - !Sub arn:${AWS::Partition}:bedrock:us-east-1:${AWS::AccountId}:inference-profile/us.amazon.nova-pro-v1:0
+                - !Sub arn:${AWS::Partition}:bedrock:*::foundation-model/amazon.nova-pro-v1:0
+            - Effect: Allow
+              Action:
+                - bedrock:ListInferenceProfiles
+              Resource:
+                - !Sub arn:${AWS::Partition}:bedrock:*:${AWS::AccountId}:inference-profile/us.amazon.nova-pro-v1:0
+                - !Sub arn:${AWS::Partition}:bedrock:*::foundation-model/amazon.nova-pro-v1:0
+            - Effect: Allow
+              Action:
+                - bedrock-agentcore:ListEvents
+                - bedrock-agentcore:CreateEvent
+              Resource:
+                - !GetAtt AgentMemory.MemoryArn
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:UpdateItem
+                - dynamodb:DeleteItem
+                - dynamodb:Query
+                - dynamodb:Scan
+                - dynamodb:BatchGetItem
+                - dynamodb:BatchWriteItem
+                - dynamodb:TransactWriteItems
+                - dynamodb:TransactGetItems
+              Resource:
+                - !GetAtt SwiftshipTable.Arn
+                - !Sub "${SwiftshipTable.Arn}/index/*"
+
+  WarehouseAgent:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        <<: *esbuild-properties
+        EntryPoints:
+          - agents/warehouse.mjs
+    Properties:
+      Handler: agents/warehouse.handler
+      Timeout: 30
+      MemorySize: 1024
+      Environment:
+        Variables:
+          MODEL_ID: us.amazon.nova-pro-v1:0
+          MEMORY_ID: !GetAtt AgentMemory.MemoryId
+      FunctionUrlConfig:
+        AuthType: NONE
+        Cors:
+          AllowCredentials: false
+          AllowMethods:
+            - GET
+            - POST
+          AllowOrigins:
+            - "*"
+          AllowHeaders:
+            - "*"
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Version: 2012-10-17
+          Statement:
+            - Effect: Allow
+              Action: bedrock:InvokeModel
+              Resource:
+                - !Sub arn:${AWS::Partition}:bedrock:us-east-1:${AWS::AccountId}:inference-profile/us.amazon.nova-pro-v1:0
+                - !Sub arn:${AWS::Partition}:bedrock:*::foundation-model/amazon.nova-pro-v1:0
+            - Effect: Allow
+              Action:
+                - bedrock:ListInferenceProfiles
+              Resource:
+                - !Sub arn:${AWS::Partition}:bedrock:*:${AWS::AccountId}:inference-profile/us.amazon.nova-pro-v1:0
+                - !Sub arn:${AWS::Partition}:bedrock:*::foundation-model/amazon.nova-pro-v1:0
+            - Effect: Allow
+              Action:
+                - bedrock-agentcore:ListEvents
+                - bedrock-agentcore:CreateEvent
+              Resource:
+                - !GetAtt AgentMemory.MemoryArn
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:UpdateItem
+                - dynamodb:DeleteItem
+                - dynamodb:Query
+                - dynamodb:Scan
+                - dynamodb:BatchGetItem
+                - dynamodb:BatchWriteItem
+                - dynamodb:TransactWriteItems
+                - dynamodb:TransactGetItems
+              Resource:
+                - !GetAtt SwiftshipTable.Arn
+                - !Sub "${SwiftshipTable.Arn}/index/*"
+
+  PaymentAgent:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        <<: *esbuild-properties
+        EntryPoints:
+          - agents/payment.mjs
+    Properties:
+      Handler: agents/payment.handler
+      Timeout: 30
+      MemorySize: 1024
+      Environment:
+        Variables:
+          MODEL_ID: us.amazon.nova-pro-v1:0
+          MEMORY_ID: !GetAtt AgentMemory.MemoryId
+      FunctionUrlConfig:
+        AuthType: NONE
+        Cors:
+          AllowCredentials: false
+          AllowMethods:
+            - GET
+            - POST
+          AllowOrigins:
+            - "*"
+          AllowHeaders:
+            - "*"
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Version: 2012-10-17
+          Statement:
+            - Effect: Allow
+              Action: bedrock:InvokeModel
+              Resource:
+                - !Sub arn:${AWS::Partition}:bedrock:us-east-1:${AWS::AccountId}:inference-profile/us.amazon.nova-pro-v1:0
+                - !Sub arn:${AWS::Partition}:bedrock:*::foundation-model/amazon.nova-pro-v1:0
+            - Effect: Allow
+              Action:
+                - bedrock:ListInferenceProfiles
+              Resource:
+                - !Sub arn:${AWS::Partition}:bedrock:*:${AWS::AccountId}:inference-profile/us.amazon.nova-pro-v1:0
+                - !Sub arn:${AWS::Partition}:bedrock:*::foundation-model/amazon.nova-pro-v1:0
+            - Effect: Allow
+              Action:
+                - bedrock-agentcore:ListEvents
+                - bedrock-agentcore:CreateEvent
+              Resource:
+                - !GetAtt AgentMemory.MemoryArn
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:UpdateItem
+                - dynamodb:DeleteItem
+                - dynamodb:Query
+                - dynamodb:BatchGetItem
+                - dynamodb:BatchWriteItem
+                - dynamodb:TransactWriteItems
+                - dynamodb:TransactGetItems
+              Resource:
+                - !GetAtt SwiftshipTable.Arn
+                - !Sub "${SwiftshipTable.Arn}/index/*"
+
+  DemoResetFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        <<: *esbuild-properties
+        EntryPoints:
+          - demo/reset.mjs
+    Properties:
+      Handler: demo/reset.handler
+      Timeout: 30
+      MemorySize: 1024
+      Events:
+        DemoResetApi:
+          Type: Api
+          Properties:
+            Path: /demo/reset
+            Method: POST
+            RestApiId: !Ref SwiftShipApi
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Version: 2012-10-17
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:DeleteItem
+                - dynamodb:Scan
+                - dynamodb:BatchWriteItem
+              Resource:
+                - !GetAtt SwiftshipTable.Arn
+
+  DeliveryStatusFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        <<: *esbuild-properties
+        EntryPoints:
+          - delivery/update-status.mjs
+    Properties:
+      Handler: delivery/update-status.handler
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Version: 2012-10-17
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+              Resource:
+                - !GetAtt SwiftshipTable.Arn
+            - Effect: Allow
+              Action:
+                - events:PutEvents
+              Resource:
+                - !Sub arn:${AWS::Partition}:events:${AWS::Region}:${AWS::AccountId}:event-bus/default
+      Events:
+        DeliveryStatusApi:
+          Type: Api
+          Properties:
+            Path: /deliveries/{deliveryId}/statuses
+            Method: POST
+            RestApiId: !Ref SwiftShipApi
+
+  TriageAgent:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        <<: *esbuild-properties
+        EntryPoints:
+          - agents/triage.mjs
+    Properties:
+      Handler: agents/triage.handler
+      Timeout: 300
+      MemorySize: 1536
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Version: 2012-10-17
+          Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+              Resource:
+                - !Sub arn:${AWS::Partition}:bedrock:us-east-1:${AWS::AccountId}:inference-profile/us.amazon.nova-pro-v1:0
+                - !Sub arn:${AWS::Partition}:bedrock:*::foundation-model/amazon.nova-pro-v1:0
+            - Effect: Allow
+              Action:
+                - bedrock:ListInferenceProfiles
+              Resource:
+                - !Sub arn:${AWS::Partition}:bedrock:*:${AWS::AccountId}:inference-profile/us.amazon.nova-pro-v1:0
+                - !Sub arn:${AWS::Partition}:bedrock:*::foundation-model/amazon.nova-pro-v1:0
+            - Effect: Allow
+              Action:
+                - bedrock-agentcore:ListEvents
+                - bedrock-agentcore:CreateEvent
+              Resource:
+                - !GetAtt AgentMemory.MemoryArn
+            - Effect: Allow
+              Action:
+                - ses:SendEmail
+              Resource:
+              - '*'
+      Environment:
+        Variables:
+          MODEL_ID: us.amazon.nova-pro-v1:0
+          MEMORY_ID: !GetAtt AgentMemory.MemoryId
+          ORDER_AGENT_URL: !GetAtt OrderAgentUrl.FunctionUrl
+          PAYMENT_AGENT_URL: !GetAtt PaymentAgentUrl.FunctionUrl
+          WAREHOUSE_AGENT_URL: !GetAtt WarehouseAgentUrl.FunctionUrl
+          FROM_EMAIL: !Ref FromEmail
+      Events:
+        DeliveryStatusUpdate:
+          Type: EventBridgeRule
+          Properties:
+            EventBusName: default
+            Pattern:
+              source: ["swiftship.delivery"]
+              detail-type: ["Delivery Status Update"]
+
+
+Outputs:
+  SwiftShipApi:
+    Description: SwiftShip API base url
+    Value: !Sub "https://${SwiftShipApi}.execute-api.${AWS::Region}.amazonaws.com/api"
+
+  OrderAgentUrl:
+    Description: Order Agent URL (A2A coordination)
+    Value: !GetAtt OrderAgentUrl.FunctionUrl
+
+  PaymentAgentUrl:
+    Description: Payment Agent URL (A2A coordination)
+    Value: !GetAtt PaymentAgentUrl.FunctionUrl
+
+  WarehouseAgentUrl:
+    Description: Warehouse Agent URL (A2A coordination)
+    Value: !GetAtt WarehouseAgentUrl.FunctionUrl

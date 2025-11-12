@@ -1,0 +1,32 @@
+{
+  "name": "switftship",
+  "version": "1.0.0",
+  "description": "Delivery system with multi-agent collaboration",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nullchecktv/swiftship-demo.git"
+  },
+  "author": "allenheltondev",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/nullchecktv/swiftship-demo/issues"
+  },
+  "homepage": "https://github.com/nullchecktv/swiftship-demo#readme",
+  "devDependencies": {
+    "@aws-sdk/client-bedrock-agentcore": "^3.920.0",
+    "@aws-sdk/client-bedrock-runtime": "^3.920.0",
+    "@aws-sdk/client-sesv2": "^3.927.0"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.920.0",
+    "@aws-sdk/client-eventbridge": "^3.920.0",
+    "@aws-sdk/util-dynamodb": "^3.920.0",
+    "@gomomento/sdk": "^1.116.0",
+    "momento-a2a-agent": "^1.23.0",
+    "zod": "^4.1.12"
+  }
+}

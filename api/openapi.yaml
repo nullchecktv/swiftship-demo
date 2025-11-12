@@ -1,0 +1,343 @@
+openapi: 3.0.3
+info:
+  title: SwiftShip Delivery Status API
+  description: |
+    API for updating delivery status asynchronously via EventBridge.
+
+    ## Delivery Status Updates
+
+    This endpoint accepts delivery status updates and publishes them to EventBridge
+    for asynchronous processing. The system handles various delivery statuses including
+    successful deliveries, failed deliveries, and delivery exceptions.
+
+    ## Authentication
+    Endpoint uses Function URL authentication with CORS enabled.
+
+  version: 1.0.0
+  contact:
+    name: SwiftShip Support
+    email: support@swiftship.com
+
+x-amazon-apigateway-request-validators:
+  Validate All:
+    validateRequestParameters: true
+    validateRequestBody: true
+x-amazon-apigateway-gateway-responses:
+  BAD_REQUEST_BODY:
+    statusCode: 400
+    responseTemplates:
+      application/json: '{ "message": "$context.error.validationErrorString" }'
+    responseParameters:
+      gatewayresponse.header.Access-Control-Allow-Origin:
+        Fn::Sub: "'*'"
+      gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+      gatewayresponse.header.Access-Control-Allow-Methods: "'GET,POST,OPTIONS'"
+  DEFAULT_4XX:
+    responseParameters:
+      gatewayresponse.header.Access-Control-Allow-Origin:
+        Fn::Sub: "'*'"
+      gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+      gatewayresponse.header.Access-Control-Allow-Methods: "'GET,POST,OPTIONS'"
+  DEFAULT_5XX:
+    responseParameters:
+      gatewayresponse.header.Access-Control-Allow-Origin:
+        Fn::Sub: "'*'"
+      gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+      gatewayresponse.header.Access-Control-Allow-Methods: "'GET,POST,OPTIONS'"
+
+servers:
+  - url: https://your-function-url.lambda-url.region.on.aws/
+    description: Production Lambda Function URL
+
+paths:
+  /deliveries/{deliveryId}/statuses:
+    post:
+      parameters:
+        - name: deliveryId
+          in: path
+          required: true
+          schema:
+            type: string
+      tags:
+        - Delivery
+      summary: Update Delivery Status
+      description: |
+        Accepts delivery status updates and publishes them to EventBridge for asynchronous processing.
+
+        Supported status types:
+        - delivered: Successful delivery
+        - failed: Delivery attempt failed
+        - exception: Delivery exception occurred
+
+        The request is immediately acknowledged and processed asynchronously.
+      operationId: updateDeliveryStatus
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeliveryStatusRequest'
+            examples:
+              delivered:
+                summary: Successful Delivery
+                value:
+                  orderId: "ORD-2024-001"
+                  status: "delivered"
+                  timestamp: "2024-11-07T10:30:00Z"
+                  location: "123 Main Street, Las Vegas, NV"
+                  driverId: "DRV-001"
+              failed:
+                summary: Failed Delivery
+                value:
+                  orderId: "ORD-2024-002"
+                  status: "failed"
+                  timestamp: "2024-11-07T11:15:00Z"
+                  location: "456 Oak Avenue, Las Vegas, NV"
+                  driverId: "DRV-002"
+                  reason: "Customer not available"
+              exception:
+                summary: Delivery Exception
+                value:
+                  orderId: "ORD-2024-003"
+                  status: "exception"
+                  timestamp: "2024-11-07T12:00:00Z"
+                  location: "789 Pine Road, Las Vegas, NV"
+                  driverId: "DRV-003"
+                  reason: "Package damaged in transit"
+      responses:
+        '202':
+          description: Status update accepted for processing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryStatusResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${DeliveryStatusFunction.Arn}/invocations
+        httpMethod: POST
+        type: aws_proxy
+
+  /demo/reset:
+    post:
+      tags:
+        - Demo
+      summary: Reset Demo Data
+      description: |
+        Resets demo data for a tenant. This endpoint cleans up existing data and generates
+        fresh scenario data for testing and demonstrations.
+
+        Scenario types:
+        - minimal: Creates minimal data set (1 customer, 1 order, etc.)
+        - full: Creates comprehensive data set (5 customers, 15 orders, etc.)
+      operationId: resetDemo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DemoResetRequest'
+            examples:
+              minimal:
+                summary: Minimal Reset
+                value:
+                  tenantId: "demo-tenant"
+                  scenarioType: "minimal"
+              full:
+                summary: Full Reset
+                value:
+                  tenantId: "demo-tenant"
+                  scenarioType: "full"
+      responses:
+        '200':
+          description: Demo reset completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DemoResetResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Reset operation already in progress
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${DemoResetFunction.Arn}/invocations
+        httpMethod: POST
+        type: aws_proxy
+
+components:
+  schemas:
+    DeliveryStatusRequest:
+      type: object
+      required:
+        - orderId
+        - status
+        - timestamp
+        - location
+        - driverId
+      properties:
+        orderId:
+          type: string
+          description: Order identifier
+          example: "ORD-2024-001"
+        status:
+          type: string
+          enum: [delivered, failed, exception]
+          description: Delivery status
+          example: "delivered"
+        timestamp:
+          type: string
+          format: date-time
+          description: Timestamp of the status update
+          example: "2024-11-07T10:30:00Z"
+        location:
+          type: string
+          description: Delivery location
+          example: "123 Main Street, Las Vegas, NV"
+        driverId:
+          type: string
+          description: Driver identifier
+          example: "DRV-001"
+        reason:
+          type: string
+          description: Reason for failed or exception status (required for failed/exception)
+          example: "Customer not available"
+
+    DeliveryStatusResponse:
+      type: object
+      properties:
+        accepted:
+          type: boolean
+          example: true
+        orderId:
+          type: string
+          example: "ORD-2024-001"
+        message:
+          type: string
+          example: "Delivery status update accepted for processing"
+        notifications:
+          type: object
+          properties:
+            authToken:
+              type: string
+            contextId:
+              type: string
+
+    DemoResetRequest:
+      type: object
+      required:
+        - tenantId
+      properties:
+        tenantId:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+          description: Tenant identifier
+          example: "demo-tenant"
+        scenarioType:
+          type: string
+          enum: [minimal, full]
+          default: full
+          description: Type of scenario data to generate
+          example: "full"
+
+    DemoResetResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        resetId:
+          type: string
+          example: "reset-1699380000000-abc123"
+        message:
+          type: string
+          example: "Demo data reset completed successfully"
+        timestamp:
+          type: string
+          format: date-time
+          example: "2024-11-07T12:00:00Z"
+        dataCreated:
+          type: object
+          properties:
+            customers:
+              type: integer
+              example: 5
+            orders:
+              type: integer
+              example: 15
+            products:
+              type: integer
+              example: 10
+            payments:
+              type: integer
+              example: 15
+            deliveryExceptions:
+              type: integer
+              example: 5
+
+    Error:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          description: Human-readable error message
+          example: "Invalid payment amount: must be positive and under $1,000,000"
+        code:
+          type: string
+          description: Machine-readable error code
+          example: "INVALID_PAYMENT_AMOUNT"
+        details:
+          type: object
+          description: Additional error details
+          example:
+            field: "amount"
+            value: "-100.00"
+            constraint: "must be positive"
+
+  responses:
+    BadRequest:
+      description: Bad request - invalid input parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            message: "Invalid request format: message field is required"
+            code: "INVALID_REQUEST_FORMAT"
+
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            message: "Something went wrong"
+            code: "INTERNAL_SERVER_ERROR"
+
+  securitySchemes:
+    FunctionURL:
+      type: http
+      scheme: bearer
+      description: |
+        Lambda Function URL authentication with CORS enabled for cross-origin requests.
+
+security:
+  - FunctionURL: []
+
+tags:
+  - name: Delivery
+    description: Delivery status management endpoints
+  - name: Demo
+    description: Demo data management endpoints
