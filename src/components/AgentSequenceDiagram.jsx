@@ -30,7 +30,7 @@ const FADE_IN_KEYFRAMES = `
 }
 `;
 
-const AgentSequenceDiagram = ({ events = [], onClear }) => {
+const AgentSequenceDiagram = ({ events = [], isProcessing = false, onClear }) => {
   const [participants, setParticipants] = useState(new Map());
   const [sequences, setSequences] = useState([]);
   const [mermaidSyntax, setMermaidSyntax] = useState('');
@@ -518,6 +518,12 @@ const AgentSequenceDiagram = ({ events = [], onClear }) => {
                   </div>
                 );
               })}
+              {isProcessing && (
+                <div className="agent-timeline-processing">
+                  <div className="spinner" style={{ width: '20px', height: '20px' }}></div>
+                  <span className="agent-timeline-processing-text">Processing...</span>
+                </div>
+              )}
             </div>
           </div>
 

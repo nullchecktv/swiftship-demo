@@ -26,7 +26,7 @@
     "@aws-sdk/client-eventbridge": "^3.920.0",
     "@aws-sdk/util-dynamodb": "^3.920.0",
     "@gomomento/sdk": "^1.116.0",
-    "momento-a2a-agent": "^1.23.0",
+    "momento-a2a-agent": "^1.24.0",
     "zod": "^4.1.12"
   }
 }

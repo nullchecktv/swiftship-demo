@@ -28,3 +28,17 @@ export const parseBody = (event) => {
     return null;
   }
 };
+
+export const buildRequest = (event) => {
+  const { rawPath, rawQueryString, headers, body, isBase64Encoded, requestContext } = event;
+  const baseUrl = `https://${requestContext.domainName}`;
+  const url = rawQueryString ? `${baseUrl}${rawPath}?${rawQueryString}` : `${baseUrl}${rawPath}`;
+  const method = event.requestContext.http.method;
+
+  let init = { method, headers };
+  if (body) {
+    init.body = isBase64Encoded ? Buffer.from(body, 'base64') : body;
+  }
+
+  return { request: new Request(url, init), baseUrl };
+};

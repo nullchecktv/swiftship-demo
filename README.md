@@ -1,68 +1,248 @@
-# SwiftShip Logistics Demo
+# SwiftShip Logistics Platform
 
-A small Vite + React demo that showcases two simple portals (Driver and Customer), interactive Mermaid diagrams, and a lightweight code viewer for TypeScript snippets. It’s frontend‑only and intended for demos and discussion.
+Multi-agent AI system for intelligent logistics operations and delivery exception handling. SwiftShip uses Amazon Bedrock and Momento Agent-to-Agent (A2A) orchestration to coordinate specialized agents that resolve delivery exceptions, process refunds, manage inventory, and handle order operations.
+
+## Deployment
+
+### Quick Deploy (Recommended)
+
+Use the deployment script to automatically deploy the backend and configure the frontend:
+
+**Using npm (easiest):**
+```bash
+# Linux/Mac/WSL/Git Bash (default)
+npm run deploy
+
+# Windows PowerShell
+npm run deploy:windows
+```
+
+The script will interactively prompt you for a Momento API key (optional).
+
+> **Windows Users:** If you have Git Bash or WSL installed, use `npm run deploy`. Otherwise, use `npm run deploy:windows` for PowerShell.
+
+**Or run the scripts directly:**
+
+**Linux/Mac/WSL (Bash):**
+```bash
+# Without Momento API key (limited functionality)
+./deploy.sh
+
+# With Momento API key (recommended for full A2A features)
+./deploy.sh "your-momento-api-key"
+```
+
+**Windows (PowerShell):**
+```powershell
+# Without Momento API key (limited functionality)
+.\deploy.ps1
+
+# With Momento API key (recommended for full A2A features)
+.\deploy.ps1 -MomentoApiKey "your-momento-api-key"
+```
+
+> **Note:** The Momento API key is optional but highly recommended. Without it, real-time agent event streaming and visualization will be limited. Get a free API key at [console.gomomento.com](https://console.gomomento.com).
+
+The script will:
+1. Build the SAM application
+2. Deploy to AWS
+3. Retrieve the API Gateway URL
+4. Automatically update the `.env` file with the correct API endpoint
+
+After deployment, simply run `npm run dev` to start the frontend.
+
+> **Troubleshooting?** See [DEPLOYMENT.md](DEPLOYMENT.md) for troubleshooting tips and advanced deployment options.
+
+## Architecture
+
+SwiftShip implements a multi-agent architecture where specialized agents collaborate to resolve delivery exceptions:
+
+- **Triage Agent**: Orchestrates exception resolution by analyzing delivery failures and coordinating other agents
+- **Order Agent**: Manages order lifecycle including status updates and order duplication for replacements
+- **Payment Agent**: Processes refunds for delivery failures and customer requests
+- **Warehouse Agent**: Handles inventory allocation for replacement orders
+
+### Agent Collaboration
+
+Agents communicate through Momento's A2A framework, enabling:
+- Event-driven agent orchestration
+- Real-time streaming of agent actions and decisions
+- Asynchronous task coordination across multiple agents
+- Transparent multi-agent workflows
 
 ## Features
-- Hash router with four views: `#/driver`, `#/customer`, `#/diagrams`, `#/code`
-- Dark/light theme toggle with persisted preference
-- Driver Exception form that generates a “prompt” preview (with copy‑to‑clipboard)
-- Customer tracking view with timeline, comment form, and generated prompt overlay
-- Mermaid diagrams (from CDN) with a simple, zoom‑friendly viewer
-- TypeScript code viewer powered by Vite’s `import.meta.glob(..., { as: 'raw', eager: true })`
-- Accessibility touches (ARIA landmarks/labels, focus handling, live regions)
 
-## Quick Start
-- Prereqs: Node.js 18+ and npm
-- Install: `npm install`
-- Dev: `npm run dev` then open the printed local URL
-- Build: `npm run build`
-- Preview build: `npm run preview`
+- Intelligent delivery exception triage and resolution
+- Multi-agent collaboration using Momento A2A
+- Real-time event streaming for agent actions
+- AWS Bedrock integration with Amazon Nova models
+- Serverless architecture with AWS Lambda and API Gateway
+- DynamoDB for order and delivery data storage
+- React-based monitoring interface for driver and customer portals
 
-## Scripts
-- `npm run dev` – Start Vite dev server
-- `npm run build` – Production build
-- `npm run preview` – Preview the build locally
+## Prerequisites
 
-## Routes
-- `#/driver` – Driver Exception Reporting portal
-- `#/customer` – Customer Order Tracking portal
-- `#/diagrams` – Architecture and workflow diagrams (Mermaid)
-- `#/code` – Code viewer for TypeScript snippets in `src/data`
+- **Node.js 22+** and npm
+- **AWS Account** with the following:
+  - AWS CLI configured with appropriate credentials
+  - Access to Amazon Bedrock (specifically Amazon Nova models)
+  - Permissions to deploy Lambda functions, API Gateway, and DynamoDB tables
+- **AWS SAM CLI** for deployment
+- **Momento Account** (optional, but recommended):
+  - Required for real-time agent event streaming and A2A orchestration
+  - Get a free API key at [console.gomomento.com](https://console.gomomento.com)
+  - Without Momento: Agents will still function but real-time event visualization will be limited
 
-## Mermaid Diagrams
-- Mermaid is loaded via CDN in `index.html` and initialized with `securityLevel: 'loose'` for convenience. If you are offline, the diagrams fallback to showing the source text.
-- To add or edit diagrams, modify the entries in `src/pages/Diagrams.jsx` (look for `DEFAULT_DIAGRAMS`). Each item has a `name` and `code` (Mermaid syntax).
+## Setup
 
-## Code Viewer (TypeScript)
-- The viewer pulls `.ts`/`.tsx` files from `src/data/**` at build time using Vite’s glob import.
-- Add new snippets by creating files under `src/data` (e.g., `src/data/new-tool.ts`). They will appear automatically in the `#/code` view.
+### 1. Clone and Install Dependencies
 
-## Serverless Handlers (Reference Only)
-- Files under `src/data/driver-handler.ts` and `src/data/customer-handler.ts` illustrate patterns for:
-  - Bedrock Guardrails (input validation/safety)
-  - Simple deterministic short‑circuit business logic
-  - Agent invocation with Bedrock `Converse`
-  - DynamoDB audit logging
-- These files are not executed by the frontend; they are for reading/demo only. If you choose to deploy them, provision AWS resources and set env vars such as:
-  - `MODEL_ID`, `GUARDRAIL_ID`, `GUARDRAIL_VERSION`
-  - `ORDERS_TABLE`, `AUDIT_LOG_TABLE`, `AWS_REGION`
+```bash
+# Install frontend dependencies
+npm install
 
-## Project Structure
-- `index.html` – Root HTML, theme bootstrapping, Mermaid CDN
-- `src/main.jsx` – React entry
-- `src/App.jsx` – Simple hash router and layout
-- `src/pages/DriverPortal.jsx` – Driver exception form + prompt overlay
-- `src/pages/CustomerPortal.jsx` – Tracking timeline + comment form + prompt overlay
-- `src/pages/Diagrams.jsx` – Mermaid diagrams and viewer
-- `src/pages/CodeViewer.jsx` – TS code viewer using glob import
-- `src/data/*.ts` – Example serverless code and domain snippets displayed in the viewer
-- `src/styles.css` – App styles
+# Install backend dependencies
+cd api
+npm install
+cd ..
+```
 
-## Notes & Tips
-- Clipboard: Some actions use the browser Clipboard API with a fallback; your browser may prompt for permission.
-- Node version: Vite 5 requires Node 18+. If startup fails, check your Node version.
-- Offline use: Without the Mermaid CDN, diagrams show raw text; reconnect or vendor the library locally if needed.
+### 2. Get Momento API Key (Optional but Recommended)
+
+For full A2A orchestration and real-time event streaming:
+
+1. Visit [console.gomomento.com](https://console.gomomento.com)
+2. Sign up for a free account
+3. Create a cache named `mcp` (or your preferred name)
+4. Generate an API key with read/write permissions
+5. Use this key during deployment
+
+> **Without Momento:** The application will still work, but you won't see real-time agent collaboration events in the UI.
+
+## Manual Deployment
+
+Use the deployment script to automatically deploy the backend and configure the frontend:
+
+**Using npm (easiest):**
+```bash
+# Linux/Mac/WSL/Git Bash (default)
+npm run deploy
+
+# Windows PowerShell
+npm run deploy:windows
+```
+
+The script will interactively prompt you for a Momento API key (optional).
+
+> **Windows Users:** If you have Git Bash or WSL installed, use `npm run deploy`. Otherwise, use `npm run deploy:windows` for PowerShell.
+
+**Or run the scripts directly:**
+
+**Linux/Mac/WSL (Bash):**
+```bash
+# Without Momento API key (limited functionality)
+./deploy.sh
+
+# With Momento API key (recommended for full A2A features)
+./deploy.sh "your-momento-api-key"
+```
+
+**Windows (PowerShell):**
+```powershell
+# Without Momento API key (limited functionality)
+.\deploy.ps1
+
+# With Momento API key (recommended for full A2A features)
+.\deploy.ps1 -MomentoApiKey "your-momento-api-key"
+```
+
+> **Note:** The Momento API key is optional but highly recommended. Without it, real-time agent event streaming and visualization will be limited. Get a free API key at [console.gomomento.com](https://console.gomomento.com).
+
+The script will:
+1. Build the SAM application
+2. Deploy to AWS
+3. Retrieve the API Gateway URL
+4. Automatically update the `.env` file with the correct API endpoint
+
+After deployment, simply run `npm run dev` to start the frontend.
+
+> **Troubleshooting?** See [DEPLOYMENT.md](DEPLOYMENT.md) for troubleshooting tips and advanced deployment options.
+
+## Usage
+
+After deployment:
+
+1. **Start the development server:**
+   ```bash
+   npm run dev
+   ```
+
+2. **Access the application:**
+   - Open http://localhost:5173
+   - Use the Driver Portal to submit delivery exceptions
+   - Watch real-time agent collaboration in the sequence diagram
+
+3. **Try the demo scenarios:**
+   - **Simple Scenario**: Customer not home - Direct triage processing
+   - **Complex Scenario**: Damaged package - Multi-agent orchestration with refunds and replacements
+
+## Agent Architecture
+
+### How Agents Work Together
+
+1. **Exception Occurs**: A delivery exception is reported through the driver portal
+2. **Triage Analysis**: The Triage Agent analyzes the exception and determines the resolution strategy
+3. **Agent Orchestration**: Based on the strategy, the Triage Agent coordinates other agents:
+   - For damaged packages: Payment Agent → Warehouse Agent → Order Agent
+   - For delivery failures: Order Agent updates status
+   - For high-value items: Special handling with priority processing
+4. **Customer Communication**: The Triage Agent sends customer notifications via email
+5. **Resolution Complete**: All agents report completion and the customer receives updates
+
+### Event Flow
+
+Agents emit events through Momento A2A that can be monitored in real-time:
+- Agent invocations and completions
+- Tool executions and results
+- Decision points and reasoning
+- Error conditions and retries
+
+## Development
+
+### Run Frontend Locally
+
+```bash
+npm run dev
+```
+
+Access the application at `http://localhost:5173`
+
+### Test Backend Locally
+
+```bash
+cd api
+sam local start-api
+```
+
+### Project Structure
+
+```
+├── api/                          # Backend serverless application
+│   ├── functions/
+│   │   ├── agents/              # Agent implementations
+│   │   ├── tools/               # Agent tools
+│   │   ├── delivery/            # Delivery management
+│   │   └── utils/               # Shared utilities
+│   ├── template.yaml            # SAM template
+│   └── package.json
+├── src/                         # Frontend React application
+│   ├── pages/                   # Portal pages
+│   ├── components/              # React components
+│   └── services/                # API and Momento services
+└── package.json
+```
 
 ## License
+
 This repository is provided for demonstration purposes. No license is specified.
 

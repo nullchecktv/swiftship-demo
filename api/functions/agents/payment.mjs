@@ -1,18 +1,16 @@
-import { z } from 'zod';
-import { createMomentoAgent } from 'momento-a2a-agent';
-import { converse } from '../utils/agents.mjs';
+import { createAgent } from 'momento-a2a-agent';
+import { converse, convertToBedrockTools } from '../utils/agents.mjs';
 import { processRefundTool } from '../tools/process-refund.mjs';
+import { buildRequest } from '../utils/api.mjs';
 
 let agent;
 
 const getAgent = async (baseUrl) => {
   if (!agent) {
     const agentParams = {
-      cacheName: 'mcp',
-      apiKey: process.env.MOMENTO_API_KEY,
       agentCard: {
         name: 'Payment Management Agent',
-        description: 'Process payments, manage transaction status, handle refunds, and verify payment integrity',
+        description: 'Processes refunds for delivery failures, damaged packages, and customer requests with transaction integrity',
         url: baseUrl,
         capabilities: {
           streaming: false,
@@ -23,7 +21,7 @@ const getAgent = async (baseUrl) => {
         {
           id: 'process-refund',
           name: 'Process Refund',
-          description: 'Process refunds for failed delivery scenarios including delivery failures, damaged packages, and customer requests',
+          description: 'Processes refunds for delivery failures, damaged packages, and customer-initiated requests',
           examples: [
             'Process refund for order ORD-12345 due to delivery failure',
             'Issue refund for damaged package',
@@ -36,18 +34,22 @@ const getAgent = async (baseUrl) => {
         defaultTtlSeconds: 3600,
         registerAgent: true
       },
-      handler: agentHandler
+      handler: agentHandler,
+      ...process.env.MOMENTO_API_KEY && {
+        cacheName: 'mcp',
+        apiKey: process.env.MOMENTO_API_KEY,
+      }
     };
 
-    agent = await createMomentoAgent(agentParams);
+    agent = await createAgent(agentParams);
   }
 
   return agent;
-}
+};
 
 export const handler = async (event) => {
   try {
-    const { request, baseUrl } = lambdaEventToRequest(event);
+    const { request, baseUrl } = buildRequest(event);
     const agentInstance = await getAgent(baseUrl);
     const response = await agentInstance.fetch(request);
 
@@ -68,67 +70,34 @@ export const handler = async (event) => {
   }
 };
 
-const lambdaEventToRequest = (event) => {
-  const { rawPath, rawQueryString, headers, body, isBase64Encoded, requestContext } = event;
-  const baseUrl = `https://${requestContext.domainName}`;
-  const url = rawQueryString ? `${baseUrl}${rawPath}?${rawQueryString}` : `${baseUrl}${rawPath}`;
-  const method = event.requestContext.http.method;
-
-  let init = { method, headers };
-  if (body) {
-    init.body = isBase64Encoded ? Buffer.from(body, 'base64') : body;
-  }
-
-  return { request: new Request(url, init), baseUrl };
-};
-
-// Convert tools to Bedrock format
-const convertToBedrockTools = (toolDefs) => {
-  return toolDefs.map(toolDef => {
-    return {
-      isMultiTenant: toolDef.isMultiTenant,
-      spec: {
-        name: toolDef.name,
-        description: toolDef.description,
-        inputSchema: { json: z.toJSONSchema(toolDef.schema) }
-      },
-      handler: toolDef.handler
-    };
-  });
-};
-
 const agentHandler = async (message) => {
-  const systemPrompt = `You are a payment management agent for SwiftShip demo system. You specialize in processing refunds for delivery scenarios.
+  const systemPrompt = `## Role
+You are the Payment Management Agent for SwiftShip Logistics, responsible for processing refunds for delivery failures and customer requests.
 
-## Core Capability
+## Instructions
+Process refunds using the processRefund tool for three primary scenarios:
+- delivery_failed: Packages that could not be delivered
+- damaged_package: Items damaged during transit
+- customer_request: Customer-initiated refund requests
 
-You have access to one essential tool for demo scenarios:
+## Steps
+1. Validate refund request parameters (orderId, reason, amount)
+2. Verify the refund reason is valid
+3. Process the refund transaction
+4. Provide confirmation with refund amount and expected timeline
 
-### processRefund - Simplified Refund Processing
-**Purpose**: Process refunds for failed delivery scenarios in the demo
-**Key Features**:
-- Process refunds for orders with delivery failures
-- Support common refund reasons: delivery_failed, damaged_package, customer_request
-- Simple validation and processing for demo reliability
-- Emit A2A events for real-time monitoring in the demo UI
+## End Goal
+Process refunds accurately and efficiently while maintaining transaction integrity and providing clear confirmation to requesting agents.
 
-## Demo Guidelines:
-- Focus on quick, reliable refund processing for demo scenarios
-- Provide clear confirmation messages
-- Handle errors gracefully with simple explanations
-- Always include scenarioId when provided for A2A event tracking
+## Narrowing
+- Only process refunds for valid orders
+- Refund reasons must be one of: delivery_failed, damaged_package, customer_request
+- Refund amounts must not exceed original order value`;
 
-This is a demonstration system - all refund processing is simulated for demo purposes.`;
+  const tools = convertToBedrockTools([processRefundTool]);
 
-  // Use only the essential refund tool for demo
-  const tools = convertToBedrockTools([
-    processRefundTool
-  ]);
-
-  // Extract tenantId from message context - this would need to be implemented based on how Momento passes context
-  // For now, using a placeholder that would need to be properly implemented
   const context = {
-    tenantId: 'demo-tenant', // This should be extracted from the actual request context
+    tenantId: 'example-tenant',
     sessionId: 'session-' + Date.now()
   };
 

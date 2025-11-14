@@ -1,5 +1,6 @@
-import { createMomentoAgent } from 'momento-a2a-agent';
-import { converse } from '../utils/agents.mjs';
+import { createAgent } from 'momento-a2a-agent';
+import { buildRequest } from '../utils/api.mjs';
+import { converse, convertToBedrockTools } from '../utils/agents.mjs';
 import { changeOrderStatus } from '../tools/change-order-status.mjs';
 import { duplicateOrder } from '../tools/duplicate-order.mjs';
 
@@ -8,11 +9,9 @@ let agent;
 const getAgent = async (baseUrl) => {
   if (!agent) {
     const agentParams = {
-      cacheName: 'mcp',
-      apiKey: process.env.MOMENTO_API_KEY,
       agentCard: {
         name: 'Order Management Agent',
-        description: 'Manage shipping orders, statuses, and order operations',
+        description: 'Manage shipping orders, statuses, and order operations for SwiftShip Logistics',
         url: baseUrl,
         capabilities: {
           streaming: false,
@@ -23,7 +22,7 @@ const getAgent = async (baseUrl) => {
         {
           id: 'change-order-status',
           name: 'Change Order Status',
-          description: 'Update order status for demo scenarios including delivery failures',
+          description: 'Update order status including delivery failures and status transitions',
           examples: [
             'Change order ORD-12345 status to delivery_failed',
             'Update order status to in_transit',
@@ -47,18 +46,22 @@ const getAgent = async (baseUrl) => {
         defaultTtlSeconds: 3600,
         registerAgent: true
       },
-      handler: agentHandler
+      handler: agentHandler,
+      ...process.env.MOMENTO_API_KEY && {
+        cacheName: 'mcp',
+        apiKey: process.env.MOMENTO_API_KEY,
+      }
     };
 
-    agent = await createMomentoAgent(agentParams);
+    agent = await createAgent(agentParams);
   }
 
   return agent;
-}
+};
 
 export const handler = async (event) => {
   try {
-    const { request, baseUrl } = lambdaEventToRequest(event);
+    const { request, baseUrl } = buildRequest(event);
     const agentInstance = await getAgent(baseUrl);
     const response = await agentInstance.fetch(request);
 
@@ -79,70 +82,38 @@ export const handler = async (event) => {
   }
 };
 
-const lambdaEventToRequest = (event) => {
-  const { rawPath, rawQueryString, headers, body, isBase64Encoded, requestContext } = event;
-  const baseUrl = `https://${requestContext.domainName}`;
-  const url = rawQueryString ? `${baseUrl}${rawPath}?${rawQueryString}` : `${baseUrl}${rawPath}`;
-  const method = event.requestContext.http.method;
-
-  let init = { method, headers };
-  if (body) {
-    init.body = isBase64Encoded ? Buffer.from(body, 'base64') : body;
-  }
-
-  return { request: new Request(url, init), baseUrl };
-};
-
-// Convert tools to Bedrock format
-const convertToBedrockTools = (tools) => {
-  return tools.map(tool => ({
-    spec: {
-      name: tool.name,
-      description: tool.description,
-      inputSchema: {
-        json: tool.schema
-      }
-    },
-    handler: tool.handler,
-    isMultiTenant: tool.isMultiTenant
-  }));
-};
-
 const agentHandler = async (message) => {
-  const systemPrompt = `You are an order management agent for SwiftShip demo system. You specialize in order status management and order duplication for delivery scenarios.
+  const systemPrompt = `## Role
+You are the Order Management Agent for SwiftShip Logistics, specializing in order status updates and order duplication for redelivery scenarios.
 
-## Core Capabilities
+## Instructions
+Manage shipping orders using two core tools:
+- changeOrderStatus: Update order status including delivery_failed states
+- duplicateOrder: Create replacement orders with optional customer/address overrides
 
-You have access to two essential tools for demo scenarios:
+## Steps
+1. Validate the requested operation and required parameters
+2. For status changes:
+   - Verify order exists
+   - Update status with appropriate reason
+3. For order duplication:
+   - Retrieve original order details
+   - Apply any customer or address overrides
+   - Create new order with updated information
+4. Provide clear confirmation with order details
 
-### 1. changeOrderStatus - Simplified Order Status Management
-**Purpose**: Update order status for demo scenarios including delivery failures
-**Key Features**:
-- Update order status including 'delivery_failed' for demo scenarios
-- Simple validation and status tracking
-- Emit A2A events for real-time monitoring in the demo UI
+## End Goal
+Execute order operations reliably while maintaining data integrity and providing clear confirmation of all changes.
 
-### 2. duplicateOrder - Simplified Order Duplication
-**Purpose**: Create replacement orders for failed deliveries in demo scenarios
-**Key Features**:
-- Create duplicate orders with optional customer and address overrides
-- Simple order copying for demo reliability
-- Emit A2A events for real-time monitoring in the demo UI
-
-## Demo Guidelines:
-- Focus on quick, reliable order operations for demo scenarios
-- Provide clear confirmation messages for all operations
-- Handle errors gracefully with simple explanations
-- Always include scenarioId when provided for A2A event tracking
-
-This is a demonstration system - all order operations are simulated for demo purposes.`;
+## Narrowing
+- Only modify orders that exist in the system
+- Status changes must use valid status values
+- Order duplication requires a valid source order`;
 
   const tools = convertToBedrockTools([changeOrderStatus, duplicateOrder]);
 
-  // Extract tenantId from message context - this would need to be implemented based on how Momento passes context
-  // For now, using a placeholder that would need to be properly implemented
   const context = {
-    tenantId: 'demo-tenant', // This should be extracted from the actual request context
+    tenantId: 'example-tenant',
     sessionId: 'session-' + Date.now()
   };
 

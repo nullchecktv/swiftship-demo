@@ -144,12 +144,12 @@ paths:
               minimal:
                 summary: Minimal Reset
                 value:
-                  tenantId: "demo-tenant"
+                  tenantId: "example-tenant"
                   scenarioType: "minimal"
               full:
                 summary: Full Reset
                 value:
-                  tenantId: "demo-tenant"
+                  tenantId: "example-tenant"
                   scenarioType: "full"
       responses:
         '200':
@@ -241,7 +241,7 @@ components:
           type: string
           pattern: '^[a-zA-Z0-9_-]+$'
           description: Tenant identifier
-          example: "demo-tenant"
+          example: "example-tenant"
         scenarioType:
           type: string
           enum: [minimal, full]

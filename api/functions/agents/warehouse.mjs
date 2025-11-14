@@ -1,5 +1,6 @@
-import { createMomentoAgent } from 'momento-a2a-agent';
-import { converse } from '../utils/agents.mjs';
+import { createAgent } from 'momento-a2a-agent';
+import { buildRequest } from '../utils/api.mjs';
+import { converse, convertToBedrockTools } from '../utils/agents.mjs';
 import { allocateInventory } from '../tools/allocate-inventory.mjs';
 
 let agent;
@@ -7,11 +8,9 @@ let agent;
 const getAgent = async (baseUrl) => {
   if (!agent) {
     const agentParams = {
-      cacheName: 'mcp',
-      apiKey: process.env.MOMENTO_API_KEY,
       agentCard: {
         name: 'Warehouse Management Agent',
-        description: 'Manage inventory tracking, stock levels, product locations, and fulfillment operations',
+        description: 'Manage inventory allocation, stock levels, and fulfillment operations for SwiftShip Logistics',
         url: baseUrl,
         capabilities: {
           streaming: false,
@@ -35,10 +34,14 @@ const getAgent = async (baseUrl) => {
         defaultTtlSeconds: 3600,
         registerAgent: true
       },
-      handler: agentHandler
+      handler: agentHandler,
+      ...process.env.MOMENTO_API_KEY && {
+        cacheName: 'mcp',
+        apiKey: process.env.MOMENTO_API_KEY,
+      }
     };
 
-    agent = await createMomentoAgent(agentParams);
+    agent = await createAgent(agentParams);
   }
 
   return agent;
@@ -46,7 +49,7 @@ const getAgent = async (baseUrl) => {
 
 export const handler = async (event) => {
   try {
-    const { request, baseUrl } = lambdaEventToRequest(event);
+    const { request, baseUrl } = buildRequest(event);
     const agentInstance = await getAgent(baseUrl);
     const response = await agentInstance.fetch(request);
 
@@ -69,69 +72,37 @@ export const handler = async (event) => {
   }
 };
 
-const lambdaEventToRequest = (event) => {
-  const { rawPath, rawQueryString, headers, body, isBase64Encoded, requestContext } = event;
-  const baseUrl = `https://${requestContext.domainName}`;
-  const url = rawQueryString ? `${baseUrl}${rawPath}?${rawQueryString}` : `${baseUrl}${rawPath}`;
-  const method = event.requestContext.http.method;
-
-  let init = { method, headers };
-  if (body) {
-    init.body = isBase64Encoded ? Buffer.from(body, 'base64') : body;
-  }
-
-  return { request: new Request(url, init), baseUrl };
-};
-
-// Convert tools to Bedrock format
-const convertToBedrockTools = (tools) => {
-  return tools.map(tool => ({
-    spec: {
-      name: tool.name,
-      description: tool.description,
-      inputSchema: {
-        json: tool.schema
-      }
-    },
-    handler: tool.handler,
-    isMultiTenant: tool.isMultiTenant
-  }));
-};
-
 const agentHandler = async (message, { task, publishUpdate }) => {
-  const systemPrompt = `You are a warehouse management agent for SwiftShip demo system. You specialize in inventory allocation for delivery scenarios.
+  const systemPrompt = `## Role
+You are the Warehouse Management Agent for SwiftShip Logistics, responsible for inventory allocation and stock management for replacement orders.
 
-## Core Capability
+## Instructions
+Manage inventory using the allocateInventory tool to reserve stock for replacement orders. Validate quantities and check availability before allocation.
 
-You have access to one essential tool for demo scenarios:
+## Steps
+1. Validate allocation request (productId, quantity, orderId)
+2. Check available inventory for the requested product
+3. Verify sufficient quantity is available
+4. Reserve the inventory for the specified order
+5. Provide confirmation with allocation details and remaining stock
 
-### allocateInventory - Simplified Inventory Allocation
-**Purpose**: Reserve inventory for replacement orders in demo scenarios
-**Key Features**:
-- Allocate inventory for specific products and orders
-- Simple validation for demo reliability
-- Check available quantities and prevent over-allocation
-- Emit A2A events for real-time monitoring in the demo UI
+## End Goal
+Allocate inventory accurately while preventing over-allocation and maintaining real-time stock visibility.
 
-## Demo Guidelines:
-- Focus on quick, reliable inventory allocation for demo scenarios
-- Provide clear confirmation messages with allocation details
-- Handle insufficient inventory gracefully
-- Always include scenarioId when provided for A2A event tracking
+## Narrowing
+- Only allocate inventory for products that exist in the system
+- Prevent allocation when insufficient quantity is available
+- Allocation quantities must be positive integers`;
 
-This is a demonstration system - all inventory operations are simulated for demo purposes.`;
-
-  const tools = convertToBedrockTools([
-    allocateInventory
-  ]);
+  const tools = convertToBedrockTools([allocateInventory]);
 
   const context = {
     taskId: task.id,
-    tenantId: 'demo-tenant',
+    tenantId: 'example-tenant',
     sessionId: 'session-' + Date.now(),
     publishUpdate
   };
-  console.log('Processing message', message);
+
   const response = await converse(process.env.MODEL_ID, systemPrompt, message, tools, context);
   return response;
 };

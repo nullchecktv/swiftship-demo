@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { BedrockRuntimeClient, ConverseCommand } from "@aws-sdk/client-bedrock-runtime";
 import { BedrockAgentCoreClient, ListEventsCommand, CreateEventCommand } from '@aws-sdk/client-bedrock-agentcore';
 
@@ -161,4 +162,18 @@ const sanitizeResponse = (text, options = {}) => {
     return text.trim();
   }
   return text.replace(/<thinking>[\s\S]*?<\/thinking>\s*/g, '').trim();
+};
+
+export const convertToBedrockTools = (toolDefs) => {
+  return toolDefs.map(toolDef => {
+    return {
+      isMultiTenant: toolDef.isMultiTenant,
+      spec: {
+        name: toolDef.name,
+        description: toolDef.description,
+        inputSchema: { json: z.toJSONSchema(toolDef.schema) }
+      },
+      handler: toolDef.handler
+    };
+  });
 };

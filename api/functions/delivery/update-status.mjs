@@ -53,7 +53,7 @@ export const handler = async (event) => {
 };
 
 const storeDeliveryStatus = async (deliveryId, statusRecord) => {
-  const tenantId = 'demo-tenant';
+  const tenantId = 'example-tenant';
   const pk = `${tenantId}#delivery#${deliveryId}`;
   const sk = `status#${statusRecord.timestamp}`;
 
@@ -76,7 +76,7 @@ const publishDeliveryEvent = async (deliveryId, statusRecord, contextId) => {
         DetailType: 'Delivery Status Update',
         Detail: JSON.stringify({
           deliveryId,
-          tenantId: 'demo-tenant',
+          tenantId: 'example-tenant',
           contextId,
           status: statusRecord
         }),

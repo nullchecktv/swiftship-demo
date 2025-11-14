@@ -6,11 +6,8 @@ Description: >
 Parameters:
   MomentoApiKey:
     Type: String
-    Description: Momento API key for A2A event streaming
+    Description: Momento API key for A2A event streaming (optional)
     NoEcho: true
-  FromEmail:
-    Type: String
-    Description: Email address to send emails from
     Default: ''
 
 Metadata:
@@ -41,8 +38,6 @@ Globals:
     Environment:
       Variables:
         AWS_NODEJS_CONNECTION_REUSE_ENABLED: 1
-        MOMENTO_API_KEY: !Ref MomentoApiKey
-        MOMENTO_CACHE_NAME: "mcp"
         TABLE_NAME: !Ref SwiftshipTable
   Api:
     Cors:
@@ -120,6 +115,8 @@ Resources:
         Variables:
           MODEL_ID: us.amazon.nova-pro-v1:0
           MEMORY_ID: !GetAtt AgentMemory.MemoryId
+          MOMENTO_API_KEY: !Ref MomentoApiKey
+          MOMENTO_CACHE_NAME: "mcp"
       FunctionUrlConfig:
         AuthType: NONE
         Cors:
@@ -184,6 +181,8 @@ Resources:
         Variables:
           MODEL_ID: us.amazon.nova-pro-v1:0
           MEMORY_ID: !GetAtt AgentMemory.MemoryId
+          MOMENTO_API_KEY: !Ref MomentoApiKey
+          MOMENTO_CACHE_NAME: "mcp"
       FunctionUrlConfig:
         AuthType: NONE
         Cors:
@@ -248,6 +247,8 @@ Resources:
         Variables:
           MODEL_ID: us.amazon.nova-pro-v1:0
           MEMORY_ID: !GetAtt AgentMemory.MemoryId
+          MOMENTO_API_KEY: !Ref MomentoApiKey
+          MOMENTO_CACHE_NAME: "mcp"
       FunctionUrlConfig:
         AuthType: NONE
         Cors:
@@ -336,6 +337,10 @@ Resources:
           - delivery/update-status.mjs
     Properties:
       Handler: delivery/update-status.handler
+      Environment:
+        Variables:
+          MOMENTO_API_KEY: !Ref MomentoApiKey
+          MOMENTO_CACHE_NAME: "mcp"
       Policies:
         - AWSLambdaBasicExecutionRole
         - Version: 2012-10-17
@@ -371,6 +376,15 @@ Resources:
       Handler: agents/triage.handler
       Timeout: 300
       MemorySize: 1536
+      Environment:
+        Variables:
+          MODEL_ID: us.amazon.nova-pro-v1:0
+          MEMORY_ID: !GetAtt AgentMemory.MemoryId
+          ORDER_AGENT_URL: !GetAtt OrderAgentUrl.FunctionUrl
+          PAYMENT_AGENT_URL: !GetAtt PaymentAgentUrl.FunctionUrl
+          WAREHOUSE_AGENT_URL: !GetAtt WarehouseAgentUrl.FunctionUrl
+          MOMENTO_API_KEY: !Ref MomentoApiKey
+          MOMENTO_CACHE_NAME: "mcp"
       Policies:
         - AWSLambdaBasicExecutionRole
         - Version: 2012-10-17
@@ -398,14 +412,6 @@ Resources:
                 - ses:SendEmail
               Resource:
               - '*'
-      Environment:
-        Variables:
-          MODEL_ID: us.amazon.nova-pro-v1:0
-          MEMORY_ID: !GetAtt AgentMemory.MemoryId
-          ORDER_AGENT_URL: !GetAtt OrderAgentUrl.FunctionUrl
-          PAYMENT_AGENT_URL: !GetAtt PaymentAgentUrl.FunctionUrl
-          WAREHOUSE_AGENT_URL: !GetAtt WarehouseAgentUrl.FunctionUrl
-          FROM_EMAIL: !Ref FromEmail
       Events:
         DeliveryStatusUpdate:
           Type: EventBridgeRule

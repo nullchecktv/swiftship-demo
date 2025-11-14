@@ -7,6 +7,8 @@ export default function ProcessingView({ deliveryData, onBack }) {
   const [processingTime, setProcessingTime] = useState(0)
   const [error, setError] = useState(null)
   const [isProcessing, setIsProcessing] = useState(true)
+  const [apiResponded, setApiResponded] = useState(false)
+  const [thinkingDots, setThinkingDots] = useState('.')
 
   useEffect(() => {
     if (!deliveryData) {
@@ -30,6 +32,7 @@ export default function ProcessingView({ deliveryData, onBack }) {
         )
 
         if (!cancelled) {
+          setApiResponded(true)
           const endTime = Date.now()
           setProcessingTime(endTime - startTime)
         }
@@ -56,6 +59,22 @@ export default function ProcessingView({ deliveryData, onBack }) {
       cancelled = true
     }
   }, [])
+
+  useEffect(() => {
+    if (!apiResponded || diagramEvents.length > 0) {
+      return
+    }
+
+    const interval = setInterval(() => {
+      setThinkingDots(prev => {
+        if (prev === '.') return '..'
+        if (prev === '..') return '...'
+        return '.'
+      })
+    }, 500)
+
+    return () => clearInterval(interval)
+  }, [apiResponded, diagramEvents.length])
 
   return (
     <div className="processing-view">
@@ -93,7 +112,7 @@ export default function ProcessingView({ deliveryData, onBack }) {
         </div>
       )}
 
-      {isProcessing && diagramEvents.length === 0 && (
+      {diagramEvents.length === 0 && (
         <section className="agent-diagram-section">
           <div className="agent-diagram-header">
             <h2 className="agent-diagram-title">
@@ -104,16 +123,21 @@ export default function ProcessingView({ deliveryData, onBack }) {
           <div className="agent-diagram-waiting">
             <div className="agent-diagram-waiting-content">
               <div className="spinner" style={{ width: '32px', height: '32px' }}></div>
-              <p className="agent-diagram-waiting-text">Sending to supervisor agent...</p>
+              <p className="agent-diagram-waiting-text">
+                {apiResponded ? `Thinking${thinkingDots}` : 'Sending to supervisor agent...'}
+              </p>
             </div>
           </div>
         </section>
       )}
 
-      <AgentSequenceDiagram
-        events={diagramEvents}
-        onClear={() => setDiagramEvents([])}
-      />
+      {diagramEvents.length > 0 && (
+        <AgentSequenceDiagram
+          events={diagramEvents}
+          isProcessing={isProcessing}
+          onClear={() => setDiagramEvents([])}
+        />
+      )}
     </div>
   )
 }

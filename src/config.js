@@ -4,7 +4,7 @@ export const API_CONFIG = {
   BASE_URL: import.meta.env.VITE_BASE_URL || 'http://localhost:3001',
 
   // Demo tenant ID for consistent testing
-  DEMO_TENANT_ID: 'demo-tenant',
+  DEMO_TENANT_ID: 'example-tenant',
 
   // Request timeout in milliseconds
   REQUEST_TIMEOUT: 30000,

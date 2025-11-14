@@ -3294,3 +3294,19 @@ body {
   }
 }
 
+
+/* Agent Timeline Processing Indicator */
+.agent-timeline-processing {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 16px;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.agent-timeline-processing-text {
+  font-style: italic;
+}
